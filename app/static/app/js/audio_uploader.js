@@ -63,9 +63,14 @@ function stopRecording() {
 }
 
 async function saveRecording() {
-    if (uploadedChunks.length <= 0) {
+    let uploadedChunkLength = uploadedChunks.length;
+    if (uploadedChunkLength <= 0) {
         console.error('No audio data recorded');
         return;
+    }
+
+    if (uploadedChunkLength !== totalChunkCount){
+        console.error("not all chunk uploaded successfully")
     }
 
     const formData = new FormData();
@@ -86,6 +91,9 @@ function resetRecording() {
     saveRecordingButton.disabled = true;
     resetRecordingButton.disabled = true;
     resetRecordingButton.disabled = false;
+    chunks = [];
+    uploadedChunks = [];
+    totalChunkCount = 0;
 }
 
 async function uploadChunk(data, chunkCount){
