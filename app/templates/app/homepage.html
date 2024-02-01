@@ -1,0 +1,157 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Recording</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+<div class="container mt-5">
+  <div class="row">
+    <div class="col-md-8 offset-md-2">
+      <h2 class="mb-4">Audio Recorder</h2>
+      {% csrf_token %}
+      <div class="mb-3">
+        <button id="startRecording" class="btn btn-primary mr-2"><i class="fas fa-microphone-alt"></i> Start Recording</button>
+        <button id="stopRecording" class="btn btn-danger" disabled><i class="fas fa-stop"></i> Stop Recording</button>
+        <button id="resetRecording" class="btn btn-secondary ml-2" disabled><i class="fas fa-undo"></i> Reset</button>
+      </div>
+      <audio controls id="audioPreview" class="d-block mb-3" style="width: 100%;"></audio>
+      <button id="saveRecording" class="btn btn-success" disabled><i class="fas fa-save"></i> Save Recording</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS and dependencies -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/08e7abd9/dist/recorder.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<!-- Custom JavaScript -->
+<script>
+  let mediaRecorder;
+  let chunks = [];
+  const timeSlice = 5000;
+  let totalChunkCount = 0;
+
+  const startRecordingButton = document.getElementById('startRecording');
+  const stopRecordingButton = document.getElementById('stopRecording');
+  const saveRecordingButton = document.getElementById('saveRecording');
+  const audioPreview = document.getElementById('audioPreview');
+  const resetRecordingButton = document.getElementById('resetRecording');
+
+  const csrfToken = document.querySelector("input[name='csrfmiddlewaretoken']").value;
+
+  startRecordingButton.addEventListener('click', startRecording);
+  stopRecordingButton.addEventListener('click', stopRecording);
+  saveRecordingButton.addEventListener('click', saveRecording);
+  resetRecordingButton.addEventListener('click', resetRecording);
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (stream) {
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = function(event) {
+          if (event.data.size > 0) {
+            totalChunkCount += 1;
+            console.log(event.data.size);
+            chunks.push(event.data);
+            uploadChunk(event.data, totalChunkCount);
+          }
+        };
+
+        mediaRecorder.onstop = function() {
+          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          audioPreview.src = URL.createObjectURL(audioBlob);
+          saveRecordingButton.disabled = false;
+        };
+
+        startRecordingButton.disabled = true;
+        stopRecordingButton.disabled = false;
+        resetRecordingButton.disabled = true;
+
+        chunks = [];
+        mediaRecorder.start(timeSlice);
+      } else {
+        console.error('Failed to access microphone or no media stream available');
+      }
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+    }
+  }
+
+
+  function stopRecording() {
+    mediaRecorder.stop();
+    startRecordingButton.disabled = false;
+    stopRecordingButton.disabled = true;
+    resetRecordingButton.disabled = false;
+  }
+
+  async function saveRecording() {
+    if (totalChunkCount <= 0) {
+      console.error('No audio data recorded');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('total_chunk', totalChunkCount)
+
+    try {
+      const response = await fetch('/save-audio/', {
+        headers: {
+          'X-CSRFToken': csrfToken
+        },
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        console.log('Recording saved successfully');
+      } else {
+        console.error('Failed to save recording');
+      }
+    } catch (error) {
+      console.error('Error saving recording:', error);
+    }
+  }
+
+  function resetRecording() {
+    audioPreview.src = '';
+    saveRecordingButton.disabled = true;
+    resetRecordingButton.disabled = true;
+    resetRecordingButton.disabled = false;
+  }
+
+  async function uploadChunk(data, chunkCount){
+    const formData = new FormData();
+    formData.append('chunk', data);
+    formData.append('chunk_count', chunkCount);
+    try {
+      const response = await fetch('/save-stream/', {
+        headers: {
+          'X-CSRFToken': csrfToken
+        },
+        method: 'POST',
+        body: formData
+      });
+
+      if (response.ok) {
+        console.log('Recording saved successfully');
+      } else {
+        console.error('Failed to save recording');
+      }
+    } catch (error) {
+      console.error('Error saving recording:', error);
+    }
+  }
+</script>
+</body>
+</html>
